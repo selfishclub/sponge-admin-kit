@@ -89,6 +89,60 @@ export function track(event: EventName, params: Params = {}) {
     console.debug("[track]", event, payload);
   }
 }
+
+export type Attribution = {
+  source: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  utm_term: string | null;
+  referrer: string | null;
+  landing_path: string | null;
+};
+
+const ATTR_KEY = "{{prefix}}_attribution";
+
+/**
+ * UTM·referrer 캡처.
+ * - 현재 URL에 utm_* / source 가 있으면 그 값을 쓰고 sessionStorage에 덮어쓴다.
+ * - 없으면 같은 탭에서 먼저 잡아둔 값을 쓴다 (랜딩 후 내부 이동해도 유지).
+ * - 둘 다 없으면 referrer / landing_path 만 기록한다.
+ */
+export function captureAttribution(): Attribution {
+  const empty: Attribution = {
+    source: null, utm_source: null, utm_medium: null, utm_campaign: null,
+    utm_content: null, utm_term: null, referrer: null, landing_path: null,
+  };
+  if (typeof window === "undefined") return empty;
+
+  const q = new URLSearchParams(window.location.search);
+  const pick = (k: string) => q.get(k)?.trim().slice(0, 100) || null;
+  const current: Attribution = {
+    source: pick("source") ?? pick("src") ?? pick("ref"),
+    utm_source: pick("utm_source"),
+    utm_medium: pick("utm_medium"),
+    utm_campaign: pick("utm_campaign"),
+    utm_content: pick("utm_content"),
+    utm_term: pick("utm_term"),
+    referrer: document.referrer ? document.referrer.slice(0, 500) : null,
+    landing_path: (window.location.pathname + window.location.search).slice(0, 300),
+  };
+  const hasCampaign = Boolean(
+    current.source || current.utm_source || current.utm_medium ||
+    current.utm_campaign || current.utm_content || current.utm_term,
+  );
+
+  let saved: Attribution | null = null;
+  try {
+    const raw = window.sessionStorage.getItem(ATTR_KEY);
+    if (raw) saved = { ...empty, ...(JSON.parse(raw) as Partial<Attribution>) };
+  } catch {}
+
+  const result = hasCampaign || !saved ? current : saved;
+  try { window.sessionStorage.setItem(ATTR_KEY, JSON.stringify(result)); } catch {}
+  return result;
+}
 ```
 
 이벤트 이름은 예시다. 실제 캠페인의 행동 계단(도착 → 관심 → 폼 도달 → 시작 → 전환)에 맞게 바꾼다. `campaign` 파라미터는 모든 이벤트에 공통으로 붙여 GA 쪽에서 캠페인별로 필터링할 수 있게 한다.
@@ -322,6 +376,7 @@ export async function GET(req: Request) {
 
 - AnalyticsHead 는 `<head>` 인라인 `<script dangerouslySetInnerHTML>`. `next/script afterInteractive` 로 넣으면 hydration 직후 useEffect 의 이벤트가 먼저 실행돼 유실된다.
 - track() 은 gtag 부재 시 `Arguments` 객체를 dataLayer 에 push (배열 아님. gtag.js 는 Arguments 만 명령으로 인식).
+- captureAttribution: 주소의 utm_* 가 항상 우선하고, 없을 때만 sessionStorage 보관값을 쓴다. 전환 API 호출 시 이 값을 본문에 실어 서버가 저장한다.
 - ga.ts: `subject_token_supplier: { getSubjectToken: () => getVercelOidcToken() }` 처럼 **화살표 함수로 감싼다**. 직접 넘기면 STS 컨텍스트가 옵션으로 들어가 audience 가 공급자 URL 로 바뀌어 invalid_grant.
 - 실패 시 reason 에 OIDC 클레임(iss/aud/sub)을 붙여 어드민에 그대로 보여 준다. 숨기지 않는다.
 - 5분 캐시. GA Data API 는 무료지만 호출 상한이 있다.
