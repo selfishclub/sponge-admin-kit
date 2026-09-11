@@ -7,7 +7,7 @@
 
 | # | 항목 | 보는 곳 | 파악 방법 |
 |---|---|---|---|
-| 1 | 프레임워크·언어 | package.json dependencies, requirements.txt, go.mod | next/react/vite/astro/express/remix 중 무엇이 있나 |
+| 1 | 프레임워크·언어 | package.json dependencies, requirements.txt, go.mod | next/react/vite/astro/express/remix 중 무엇이 있나 · Next.js 는 메이저 버전도 적는다(16+ 는 proxy.ts, 15 이하는 middleware.ts) |
 | 2 | 패키지 관리자 | package-lock.json / pnpm-lock.yaml / yarn.lock / bun.lockb | 있는 lockfile 하나 |
 | 3 | 호스팅·배포 | vercel.json, .vercel/, netlify.toml, wrangler.toml, Dockerfile, fly.toml, .github/workflows | 파일 존재로 판단. 여러 개면 전부 적고 물어본다 |
 | 4 | 서버 라우트 가능 여부 | app/api, pages/api, src/app/api, 서버 함수 설정 | 없으면 "정적 사이트"로 표시 (단축 링크를 어디서 돌릴지 물어야 함) |

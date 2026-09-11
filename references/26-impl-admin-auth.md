@@ -85,12 +85,12 @@ export async function POST() {
 }
 ```
 
-## src/middleware.ts (페이지 보호. /tools/* 와 /api 의 관리용 경로)
+## src/proxy.ts (페이지 보호. /tools/* 와 /api 의 관리용 경로)
 ```ts
 import { NextResponse, type NextRequest } from "next/server";
 // Edge 런타임에서는 node:crypto 를 못 쓰므로 여기서는 쿠키 존재만 보고, 실제 검증은 각 라우트의 requireAdmin 이 한다.
 // 페이지는 서버 컴포넌트 첫 줄에서 verifySession 을 다시 호출한다(아래 page 예시).
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const p = req.nextUrl.pathname;
   const protectedPage = p.startsWith("/tools") && p !== "/tools/login";
   if (protectedPage && !req.cookies.get("admin_session")?.value) {
@@ -101,6 +101,7 @@ export function middleware(req: NextRequest) {
 }
 export const config = { matcher: ["/tools/:path*"] };
 ```
+Next.js 15 이하면 파일 이름 `src/middleware.ts`, 함수 이름 `middleware`. 16부터는 `proxy` 다(`middleware` 는 deprecated). 00-detect 의 프레임워크 버전으로 정한다.
 
 ## src/app/tools/login/page.tsx (서버 컴포넌트 + 작은 클라이언트 폼)
 ```tsx
