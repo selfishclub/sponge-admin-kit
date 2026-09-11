@@ -11,6 +11,9 @@ Supabase 클라이언트 → rate limit → 리소스별 라우트 → 집계)�
 
 ### `src/lib/tables.ts`
 
+이 아래 모든 라우트가 `TABLES.*` 로만 테이블을 가리킨다. 표 이름 자체를 라우트 코드에 직접 쓰지
+않으니, 접두어를 바꾸거나 표를 하나 더 쪼갤 때 이 파일 한 곳만 고치면 된다.
+
 ```ts
 /** 이 사이트 전용 테이블명. 접두어로 같은 프로젝트의 다른 서비스 테이블과 분리한다. */
 export const TABLES = {
@@ -65,6 +68,9 @@ export function supabaseUnavailable(): NextResponse {
 
 ### `src/lib/rate-limit.ts`
 
+POST 로 남용될 수 있는 라우트(링크 생성)가 호출하는 카운터. 키는 호출부가 정한다 — IP, 세션 id
+등 상황에 맞는 값을 넘기면 된다.
+
 ```ts
 /**
  * 아주 단순한 인메모리 rate limit.
@@ -106,7 +112,8 @@ if (typeof setInterval === "function") {
 
 ### `src/app/api/channels/route.ts`
 
-채널 등록부: 생성기 카드 목록을 읽고(`GET`), 관리자가 추가(`POST`)·수정(`PATCH`)한다.
+채널 등록부: 관리자 빌더 화면이 읽고(`GET`) 추가(`POST`)·수정(`PATCH`)하는 카드 목록이다. 빌더
+화면 자체가 로그인 뒤에 있으므로 `GET` 을 포함한 모든 메서드를 인증 뒤에 둔다.
 
 ```ts
 import { NextResponse } from "next/server";
@@ -126,7 +133,9 @@ export async function listChannels(): Promise<Channel[]> {
   return (data ?? []) as Channel[];
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   if (!hasSupabaseEnv()) return supabaseUnavailable();
   try {
     return NextResponse.json({ channels: await listChannels() });
@@ -200,7 +209,8 @@ export async function PATCH(req: Request) {
 ### `src/app/api/utm-links/route.ts`
 
 링크 장부: 목록 + 신청자 수 합치기(`GET`), 채널 여러 개로 한 번에 생성(`POST`), 보관·메모
-수정(`PATCH`).
+수정(`PATCH`). `GET` 응답에도 `created_by`·`short_code` 같은 운영 정보가 그대로 실려 나가므로,
+이 라우트 역시 `GET` 을 포함한 모든 메서드를 인증 뒤에 둔다.
 
 ```ts
 import { NextResponse } from "next/server";
@@ -230,7 +240,9 @@ function countSignups(rows: SignupUtm[]): Map<string, number> {
 }
 
 /** 목록 + 링크별 신청자 수 + 채널 목록 */
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   if (!hasSupabaseEnv()) return supabaseUnavailable();
   try {
     const channels = await listChannels();
@@ -544,7 +556,8 @@ export async function GET(req: Request) {
   갑자기 사라지면 그 링크는 죽은 링크가 된다.
 - rate limit 은 인메모리(인스턴스별) 1차 방어일 뿐이다. 완벽한 차단이 필요하면 Upstash 같은 공유
   스토어로 교체한다 — `rateLimit()` 의 시그니처만 유지하면 호출부는 그대로 둬도 된다.
-- `channels`·`utm-links` 의 `POST`/`PATCH`, `stats` 의 `GET` 은 관리자만 써야 하는 라우트다.
-  `26-impl-admin-auth.md` 에서 정의하는 `requireAdmin(req)` 를 각 핸들러 **첫 줄**에 두고, 거부 응답이
-  오면 그 자리에서 바로 반환한다. 목록을 보여주는 `GET`(channels, utm-links)은 이 구현에서는
-  공개로 남겨 두었지만, 운영 화면이 자체 로그인 뒤에 있지 않다면 같은 방식으로 잠가도 된다.
+- `channels`·`utm-links`·`stats` 는 모두 관리자 전용 라우트다. `channels`·`utm-links` 는 **GET 포함
+  전 메서드**를, `stats` 는 유일한 메서드인 `GET` 을 `26-impl-admin-auth.md` 에서 정의하는
+  `requireAdmin` 뒤에 둔다 — 목록 조회 자체가 `created_by`·`short_code`·신청자 수 같은 운영 정보를
+  그대로 내보내므로, 읽기 전용이라고 예외를 두지 않는다. 호출은 각 핸들러 **첫 줄**에서 판정값을
+  받아 바로 반환하는 형태로 하고, 거부 응답이 오면 그 자리에서 끝낸다(각 라우트 코드 블록 참고).

@@ -7,16 +7,13 @@ Next.js App Router 기준(`app/l/[code]/route.ts`). 다른 스택이면 "코드�
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
 import { TABLES } from "@/lib/tables";
-import { readJson, writeJson } from "@/lib/local-store";
-import { LANDING_URL, normalizeValue, type UtmLink } from "@/lib/utm";
+import { LANDING_URL, normalizeValue } from "@/lib/utm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** 링크 미리보기 봇은 클릭으로 세지 않는다 */
 const BOT_UA = /bot|crawl|spider|slurp|facebookexternalhit|facebookcatalog|kakaotalk-scrap|kakaostory|twitterbot|slackbot|discordbot|telegrambot|whatsapp|linkedinbot|pinterest|skypeuripreview|embedly|quora link preview|line-poker|yeti|daum|preview|curl\/|wget\//i;
-
-export type LocalClick = { link_id: string; clicked_at: string; device: "mobile" | "desktop" | "other"; referer_host: string | null };
 
 function deviceOf(ua: string): "mobile" | "desktop" | "other" {
   if (!ua) return "other";
@@ -42,20 +39,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ code: string }>
 
   try {
     let url: string | null = null;
-    if (!hasSupabaseEnv()) {
-      const links = await readJson<UtmLink[]>("utm-links.json", []);
-      const l = links.find((x) => x.short_code === code && !x.archived);
-      if (l) {
-        url = l.url;
-        if (countIt) {
-          l.clicks = (l.clicks ?? 0) + 1; l.last_clicked_at = new Date().toISOString();
-          await writeJson("utm-links.json", links);
-          const log = await readJson<LocalClick[]>("link-clicks.json", []);
-          log.push({ link_id: l.id, clicked_at: l.last_clicked_at, device, referer_host: referer });
-          await writeJson("link-clicks.json", log);
-        }
-      }
-    } else if (code) {
+    if (hasSupabaseEnv() && code) {
       const db = getSupabaseAdmin();
       if (countIt) {
         const { data, error } = await db.rpc("{{prefix}}_hit_link", { p_code: code, p_device: device, p_referer: referer });
@@ -66,7 +50,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ code: string }>
         url = data?.url ?? null;
       }
     }
-    // 모르는 코드여도 고객은 랜딩으로 보낸다 (출처만 기록)
+    // Supabase env 가 없거나 모르는 코드여도 고객은 랜딩으로 보낸다 (이 경우 클릭은 세지 않고 출처만 기록)
     return NextResponse.redirect(url ?? `${LANDING_URL}?utm_source=short-link&utm_medium=unknown&utm_campaign={{campaign}}&utm_content=${encodeURIComponent(code || "empty")}`, { status: 302, headers: noStore });
   } catch (e) {
     console.error("[short-link]", e);
@@ -110,3 +94,5 @@ grant execute on function public.{{prefix}}_hit_link(text, text, text) to servic
 - 카운트 +1 과 클릭 로그 insert 는 SQL 함수 한 번(SECURITY DEFINER, search_path 고정, anon EXECUTE 회수)으로. 두 쿼리로 나누면 동시 클릭에서 어긋난다.
 - 모르는 코드도 랜딩으로 보내되 utm_source=short-link&utm_medium=unknown 을 붙여 흔적을 남긴다.
 - 목적지는 DB 의 url 컬럼뿐. 쿼리 파라미터로 받은 URL 로는 절대 넘기지 않는다(오픈 리다이렉트).
+- Supabase env 가 없으면 DB 조회·카운팅을 아예 건너뛰고 랜딩으로 302 만 한다. 로컬 JSON 폴백으로
+  클릭을 따로 세지 않는다 — 집계가 필요하면 Supabase env 를 먼저 맞춘다.

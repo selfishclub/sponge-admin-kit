@@ -18,7 +18,7 @@ create table if not exists public.{{prefix}}_signups (
   name text not null check (char_length(name) between 2 and 30),
   phone text not null,                       -- 숫자만 남긴 정규화 값 (예: 01012345678)
   email text not null,                       -- 소문자 정규화
-  open_alert_requested_at timestamptz not null default now(),
+  requested_at timestamptz not null default now(),  -- 전환 요청 시각
 
   -- 개인정보 수집·이용 동의 (필수)
   privacy_consent boolean not null check (privacy_consent = true),

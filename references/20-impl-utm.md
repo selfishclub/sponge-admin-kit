@@ -45,7 +45,7 @@ export type UtmLink = {
   signups?: number;
 };
 
-/** Supabase 없이 개발할 때 쓰는 기본 채널 (마이그레이션 seed와 동일) */
+/** 채널 표가 비어 있을 때 seed 로 넣는 예시 채널. 실제 채널은 사용자에게 받은 목록으로 바꾼다 (마이그레이션 seed와 동일) */
 export const DEFAULT_CHANNELS: Omit<Channel, "id">[] = [
   { code: "ig-bio", name: "인스타 프로필", source: "instagram", medium: "bio", content_mode: "none", content_prefix: null, note: "프로필 상단 링크. 하나만 둔다", sort: 10, active: true },
   { code: "ig-reel", name: "인스타 릴스", source: "instagram", medium: "reel", content_mode: "serial", content_prefix: "reel", note: "릴스 댓글·스티커. 릴스마다 새 번호", sort: 20, active: true },
